@@ -56,15 +56,18 @@ async function main() {
       return;
     }
 
+    // Parse URL pathname
+    const pathname = req.url?.split("?")[0] || "/";
+
     // Health check endpoint
-    if (req.url === "/health" && req.method === "GET") {
+    if (pathname === "/health" && req.method === "GET") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok", service: "openpecha-mcp" }));
       return;
     }
 
-    // MCP endpoint
-    if (req.url === "/mcp" || req.url?.startsWith("/mcp/")) {
+    // MCP endpoint - route everything to transport
+    if (pathname === "/mcp" || pathname.startsWith("/mcp/")) {
       transport.handleRequest(req, res);
       return;
     }
