@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 
+import { createServer } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { randomUUID } from "node:crypto";
 
 import { registerTextTools } from "./tools/texts.js";
 import { registerInstanceTools } from "./tools/instances.js";
@@ -34,9 +36,49 @@ registerCompoundTools(server);     // C1-C5: get_text_content_by_title, get_text
                                    //         get_instance_annotations_with_content
 
 async function main() {
-  const transport = new StdioServerTransport();
+  const port = parseInt(process.env.PORT || "3000", 10);
+
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: () => randomUUID(),
+  });
+
   await server.connect(transport);
-  console.error("OpenPecha MCP server running on stdio");
+
+  const httpServer = createServer((req, res) => {
+    // CORS headers
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(200);
+      res.end();
+      return;
+    }
+
+    // Health check endpoint
+    if (req.url === "/health" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ status: "ok", service: "openpecha-mcp" }));
+      return;
+    }
+
+    // MCP endpoint
+    if (req.url === "/mcp" || req.url?.startsWith("/mcp/")) {
+      transport.handleRequest(req, res);
+      return;
+    }
+
+    // 404
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Not found" }));
+  });
+
+  httpServer.listen(port, "0.0.0.0", () => {
+    console.log(`OpenPecha MCP server running on port ${port}`);
+    console.log(`Health check: http://localhost:${port}/health`);
+    console.log(`MCP endpoint: http://localhost:${port}/mcp`);
+  });
 }
 
 main().catch((error) => {
